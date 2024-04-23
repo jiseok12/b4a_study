@@ -1,0 +1,229 @@
+﻿Build1=Default,b4a.example
+File1=Layout.bal
+FileGroup1=Default Group
+Group=Default Group
+Library1=byteconverter
+Library2=core
+Library3=gpio
+Library4=phone
+Library5=randomaccessfile
+Library6=runtimepermissions
+Library7=uart
+Library8=xui
+Library9=livewallpaper
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~
+Module1=HardWareSerial
+Module2=Starter
+NumberOfFiles=1
+NumberOfLibraries=9
+NumberOfModules=2
+Version=12.8
+@EndOfDesignText@
+#Region  Project Attributes 
+	#ApplicationLabel: GPIO TEST
+	#VersionCode: 1
+	#VersionName: 
+	'SupportedOrientations possible values: unspecified, landscape or portrait.
+	#SupportedOrientations: unspecified
+	#CanInstallToExternalStorage: False
+#End Region
+
+#Region  Activity Attributes 
+	#FullScreen: False
+	#IncludeTitle: False
+#End Region
+
+#BridgeLogger: True 
+
+Sub Process_Globals
+	'These global variables will be declared once when the application starts.
+	'These variables can be accessed from all modules.
+	Private xui As XUI
+	Dim TimerRcv As Timer
+	
+End Sub
+
+Sub Globals
+	'These global variables will be redeclared each time the activity is created.
+	Private SerialOut As OutputStream
+	Private SerialIn As InputStream
+	Private astream As AsyncStreams
+	
+	Dim myUART As UART
+	Dim ReceivedData As List
+	
+	Dim lastStdOut As String
+	
+	' Dim URI As "/dev/ttyS1"
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	Activity.LoadLayout("Layout")
+	
+	myUART.Initialize("myUART", "/dev/ttyS1", 9600, 0, False, False)
+	
+	ReceivedData.Initialize
+	
+	TimerRcv.Initialize("TimerRcv", 100) '100ms 간격으로 사용한다
+	TimerRcv.Enabled = False
+	
+End Sub
+
+Private Sub Astream_NewData (Buffer() As Byte)
+	Try
+		Dim Recdata As String
+		Recdata = BytesToString(Buffer, 0, Buffer.Length, "UTF8")
+		Log(Recdata)
+	Catch
+		Log(LastException)
+	End Try
+End Sub
+
+Sub Activity_Resume
+
+End Sub
+
+Sub Activity_Pause (UserClosed As Boolean)
+	ShellCmd("echo 476 > /sys/class/gpio/unexport")
+
+End Sub
+
+Sub CheckInput_Tick
+	CheckGPIO476
+End Sub
+
+Sub CheckGPIO476
+	ShellCmd("cat /sys/class/gpio/gpio476/value")
+			
+End Sub
+
+Sub Button1_Click
+	Dim pf As PortFinder ' Uart library 의 portFinder 클래스
+	Log(pf.GetAllDevicesPath) '/dev/ttyS0
+	
+End Sub
+
+Sub Button2_Click
+	Log("HIGH")
+	ShellCmd("echo 1 > /sys/class/gpio/gpio477/value")
+	
+End Sub
+
+Sub Button3_Click
+	Log("LOW")
+	ShellCmd("echo 0 > /sys/class/gpio/gpio477/value")
+	
+End Sub
+Sub Button4_Click
+	Log("시리얼 통신")
+    
+	Dim text As String = "Hello, World!"
+	Dim bc As ByteConverter
+	Dim data() As Byte = bc.StringToBytes(text, "UTF8")
+    
+	sendDataBytes(data)
+    
+	Dim packet(10) As Byte
+	packet(0) = 0x02
+	packet(1) = 0x31
+	packet(2) = 0x30
+    
+	' 문자열을 헥사 코드로 변환하고 패킷에 삽입
+	Dim hexString As String = StringToHex("hello") ' "YourStringHere" 부분을 실제 문자열로 변경
+	Dim hexBytes() As Byte = bc.HexToBytes(hexString)
+	For i = 3 To 7
+		packet(i) = hexBytes(i - 3)
+	Next
+    
+	packet(8) = 0x03
+    
+	packet(9) = XOR_Packet(packet, 0, 9)
+	sendDataBytes(packet)
+End Sub
+
+Sub StringToHex(StrToHex As String) As String
+	Dim strTemp   As String
+	Dim strReturn As String
+	Dim I As Long
+	For I = 0 To StrToHex.Length-1
+		strTemp = Bit.ToHexString(Asc(StrToHex.SubString2(I,I+1)))
+		If strTemp.Length = 1 Then strTemp = "0" & strTemp
+		strReturn = strReturn & strTemp
+	Next
+	Return strReturn
+End Sub
+
+
+
+private Sub sendDataBytes(data() As Byte)
+	Dim bc As ByteConverter
+	Log("TX: " & bc.HexFromBytes(data))
+	 'Log("TX2 : " &XOR_Packet(data, 2, 1))
+	
+	
+	
+	myUART.Write(data)
+End Sub
+
+Sub ListToArray(data As List) As Byte()
+	Dim bytes(data.Size) As Byte
+	For i = 0 To data.Size -1
+		bytes(i) = data.Get(i)
+	Next
+	Return bytes
+End Sub
+
+Sub XOR_Packet(arr() As Byte, startIndex As Int, endIndex As Int) As Byte
+	If arr.Length = 0 Or startIndex > endIndex Or startIndex < 0 Or endIndex >= arr.Length Then
+		Return 0
+	End If
+	
+	Dim result As Byte = arr(startIndex)
+	For i = startIndex + 1 To endIndex
+		result = Bit.Xor(result, arr(i))
+	Next
+	Return result
+End Sub
+
+Sub TimerRcv_Tick
+	TimerRcv.Enabled = False
+	Dim bc As ByteConverter
+	
+	Dim allData() As Byte = ListToArray(ReceivedData)
+	
+	LogColor("RX: " & bc.StringFromBytes(allData, "UTF-8"), Colors.Blue)
+	ReceivedData.Clear ' 리스트 클리어
+End Sub
+
+Private Sub myUART_NewDAta(data() As Byte)
+	' Dim bc As ByteConverter
+	' Log(bc.StringFromBytes(data, "UTF-8"))
+	
+	ReceivedData.AddAll(data)
+	TimerRcv.Enabled = True
+End Sub
+
+
+
+Sub ShellCmd(s As String)
+	Dim Command, Runner, Cmd As String
+	Dim StdOut, StdErr As StringBuilder
+	Dim ShResult As Int
+	Dim Ph As Phone
+                
+	Cmd = s
+                
+	StdOut.Initialize
+	StdErr.Initialize
+                                
+	Runner = File.Combine(File.DirInternalCache, "runner")
+	Command = File.Combine(File.DirInternalCache, "command")
+	File.WriteString(File.DirInternalCache, "runner", "su < " & Command)
+	File.WriteString(File.DirInternalCache, "command", Cmd & CRLF & "exit")
+	ShResult = Ph.Shell("sh", Array As String(Runner), StdOut, StdErr)
+	
+	' Label1.Text = 'dkskskdkd'
+	
+	Log(StdOut)
+	'Log(ShResult)
+End Sub
